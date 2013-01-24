@@ -1,0 +1,182 @@
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+
+##
+# This script is an exmple of using the (optional) ib.opt package
+# instead of the regular API.
+##
+
+from time import sleep
+from ib.ext.Contract import Contract
+from ib.ext.Order import Order
+from ib.opt import ibConnection, message
+
+#import pymongo
+import datetime
+
+#connection = pymongo.MongoClient()
+#db = connection.test_database
+
+#ticks = db.ticks
+
+lastprice = 0
+
+#from ib.ext.EClientSocket import mlock
+from threading import Lock
+
+mlock = Lock()
+
+def my_account_handler(msg):
+    print msg
+
+def my_tick_handler(msg):
+    global lastprice
+    lastprice = msg.price
+
+    try:
+        mlock.release()
+        print "unlock", msg
+    except Exception as e:
+        print "Exception:", type(e), e
+
+class Stratregy:
+
+    __prices__ = []
+    __macds__ = []
+    score = 0
+
+    def addPrice(self, price):
+        self.__prices__.append(price)
+
+    __prev_ema__ = {}
+    def getEma(self, data, period):
+        k = 2. / (1. + period)
+
+        try:
+            self.__prev_ema__[period]
+        except KeyError:
+            self.__prev_ema__[period] = 0
+
+        if len(data) < period - 1:
+            return 0
+        elif len(data) == period:
+            total = 0
+            for i in data:
+                total += i
+            self.__prev_ema__[period] = round(i / period, 4)
+        else:
+            self.__prev_ema__[period] =  round(k * (data[-1] - self.__prev_ema__[period]) + self.__prev_ema__[period], 4)
+
+        return self.__prev_ema__[period]
+
+    def getScore(self):
+        return self.score
+
+    def getMacd(self):
+
+        if len(self.__prices__) >= 11:
+            ema12 = self.getEma(self.__prices__, 12)
+
+        if (len(self.__prices__) >= 25):
+            ema26 = self.getEma(self.__prices__, 26)
+            macd = round(ema26 - ema12, 4)
+            self.__macds__.append(macd)
+
+        if len(self.__prices__) >= 26 + 9:
+            signal_line = self.getEma(self.__macds__, 9)
+            signal = signal_line == macd
+
+            self.score = self.score - 1 if signal_line - macd < 0 else self.score + 1
+
+            return {"12": ema12, "26":ema26, "macd":macd, "signal": signal_line, "sig": "SIIIIGGNNALLLLL" if signal else "", "st": "BUY" if signal_line < macd else "SELL"}
+
+        return {"12": 0, "26": 0, "macd": 0, "singal": 0, "sig": 0}
+
+
+def watcher(msg):
+
+#    if msg.key == 'DayTradesRemaining':
+#        print "========", msg
+
+    print type(msg), msg
+
+def orderStatus(msg):
+    print "-----",msg
+
+def tstring(msg):
+    print "_______", msg
+
+def connect():
+    con = ibConnection('172.20.0.11')
+#    con = ibConnection()
+
+#    con.register(my_account_handler, 'UpdateAccountValue')
+#    con.register(orderStatus, 'UpdatePortfolio')
+
+    con.register(my_tick_handler, message.TickPrice)
+    con.register(tstring, message.TickString)
+#    con.registerAll(watcher)
+#    con.register(watcher, 'message.UpdateAccountValue')
+
+ #   con.unregister(watcher, message.TickSize)
+
+    con.connect()
+ #   con.reqAccountUpdates(1, '')
+
+    qqqq = Contract()
+    qqqq.m_symbol = 'MNST'
+    qqqq.m_secType = 'STK'
+    qqqq.m_exchange = 'SMART'
+    qqqq.m_currency = 'USD'
+
+#    con.reqHistoricalData(1, qqqq, '', '1 M', '1 hour', 'TRADES', 1, 1)
+
+    con.reqMktData(0, qqqq, '', False)
+    return con
+
+
+if __name__ == "__main__":
+
+    con = connect()
+
+    order = Order()
+    order.m_minQty = 100
+    order.m_lmtPrice = 47.54
+    order.m_orderType = 'MKT'
+    order.m_totalQuantity = 100
+    order.m_action = 'BUY'
+    qqqq = Contract()
+    qqqq.m_symbol = 'MNST'
+    qqqq.m_secType = 'STK'
+    qqqq.m_exchange = 'SMART'
+    qqqq.m_currency = 'USD'
+
+#    con.placeOrder(id=1, contract=qqqq, order=order)
+
+    c = Strategy()
+
+    tab = []
+
+    def avg(l):
+        total = 0
+        for p in l:
+            total += p
+        return total / len(l)
+
+    tmp = 0
+    while 1:
+        if not con.isConnected():
+            while not con.isConnected():
+                print "Try to reconnect:"
+                con = connect()
+                sleep(1)
+        if lastprice and tmp != lastprice:
+            print "lock"
+            mlock.acquire()
+
+#            tmp = lastprice
+#            tab.append(lastprice)
+#            c.addPrice(lastprice)
+#            m = c.getMacd()
+#            print lastprice, " ", m, " ", c.getScore()
+
