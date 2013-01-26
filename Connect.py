@@ -5,10 +5,11 @@ Connection wrapper for the ib.opt.ibConnection
 from ib.ext.Contract import Contract
 from ib.ext.Order import Order
 from ib.opt import ibConnection, message
+
 from time import sleep
 from tools import daemonize
 from threading import Event
-import sys
+from sys import stderr, exit
 
 def needConnection(func):
     """Connection check
@@ -47,7 +48,7 @@ class Connect():
     def setNextValidId(self, msg):
         """nextValidId handler"""
         if self.verbose:
-            print >> sys.stderr, msg
+            print >> stderr, msg
         self._next_valid_id = msg.orderId
 
     def initRegister(self):
@@ -78,12 +79,12 @@ class Connect():
         try:
             """If the connection fail, keep trying"""
             while not self.isConnected():
-                print >> sys.stderr, "Trying to connect..."
+                print >> stderr, "Trying to connect..."
                 self._con.connect()
                 sleep(1)
         except KeyboardInterrupt:
             """In case of CTRL-C, simply exit"""
-            sys.exit(1)
+            exit(1)
 
         """Flag the connected Event"""
         self._connected.set()
@@ -249,4 +250,4 @@ class Connect():
     def watcher(self, msg):
         """Global handler"""
         if self.verbose:
-            print >> sys.stderr, type(msg), msg
+            print >> stderr, type(msg), msg
